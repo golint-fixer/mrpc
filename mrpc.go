@@ -25,7 +25,7 @@ var (
 // Objects implementing the TopicHandler interface can be
 // registered to serve a particular topic.
 type TopicHandler interface {
-	Serve(TopicWriter, []byte)
+	Serve(w TopicWriter, requestTopic string, data []byte)
 }
 
 // A TopicWriter interface is used for create response for bidirectional
@@ -94,8 +94,8 @@ func (s *Service) Handle(topic string, handler TopicHandler) error {
 		return err
 	}
 
-	s.transport.Subscribe(s.GetFQTopic(topic), CHAN_NAME, func(responseTopic string, data []byte) {
-		handler.Serve(&TopicClient{responseTopic, s.transport}, data)
+	s.transport.Subscribe(s.GetFQTopic(topic), CHAN_NAME, func(responseTopic, requestTopic string, data []byte) {
+		handler.Serve(&TopicClient{responseTopic, s.transport}, requestTopic, data)
 	})
 
 	return nil
@@ -113,6 +113,6 @@ func (s *Service) Serve() os.Signal {
 
 type HandlerFunc func(TopicWriter, []byte)
 
-func (f HandlerFunc) Serve(w TopicWriter, data []byte) {
+func (f HandlerFunc) Serve(w TopicWriter, requestTopic string, data []byte) {
 	f(w, data)
 }

@@ -42,7 +42,7 @@ func (n *NATSTransport) Connect() error {
 
 func (n *NATSTransport) Subscribe(topicName, channelName string, handler mrpc.SubscribeHandlerFunc) error {
 	_, err := n.conn.QueueSubscribe(topicName, channelName, func(msg *nats.Msg) {
-		handler(msg.Reply, msg.Data)
+		handler(msg.Reply, topicName, msg.Data)
 	})
 
 	return err

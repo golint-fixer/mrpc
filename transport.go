@@ -4,7 +4,7 @@ import (
 	"time"
 )
 
-type SubscribeHandlerFunc func(responseTopic string, rawData []byte)
+type SubscribeHandlerFunc func(responseTopic, requestTopic string, rawData []byte)
 
 type Transport interface {
 	Connect() error
