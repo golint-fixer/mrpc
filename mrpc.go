@@ -3,8 +3,10 @@
 package mrpc
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -44,14 +46,26 @@ func (t *TopicClient) Write(data []byte) error {
 	return t.transport.Publish(t.topic, data)
 }
 
+type StatusResponse struct {
+	ServiceName    string
+	ServiceGroup   string
+	ServiceVersion string
+}
+
 type ServiceOptions struct {
-	RequestTimeout    time.Duration
-	ErrorHandlerTopic string
+	RequestTimeout     time.Duration
+	ErrorHandlerTopic  string
+	HTTPServer         *http.ServeMux
+	HTTPServerAddress  string // Disable HTTP server if address is empty
+	HTTPStatusEndpoint string
 }
 
 var DefaultOptions = ServiceOptions{
-	RequestTimeout:    DefaultRequestTimeout,
-	ErrorHandlerTopic: DefaultErrorHandlerTopic,
+	RequestTimeout:     DefaultRequestTimeout,
+	ErrorHandlerTopic:  DefaultErrorHandlerTopic,
+	HTTPServer:         nil,
+	HTTPServerAddress:  "",
+	HTTPStatusEndpoint: "/status",
 }
 
 type Service struct {
@@ -61,7 +75,9 @@ type Service struct {
 	adapter   MessageAdapter
 	Opts      ServiceOptions
 
-	MessageAdapter MessageAdapter
+	MessageAdapter    MessageAdapter
+	HTTPServer        *http.ServeMux
+	HTTPServerAddress string
 
 	serviceGroup   string
 	serviceName    string
@@ -87,14 +103,41 @@ func NewServiceWithAdapter(transport Transport, adapter MessageAdapter, serviceG
 		opts = *options
 	}
 
+	var httpServer *http.ServeMux
+
+	if opts.HTTPServerAddress != "" {
+		if opts.HTTPServer != nil {
+			httpServer = opts.HTTPServer
+		} else {
+			httpServer = http.NewServeMux()
+		}
+
+		if opts.HTTPStatusEndpoint != "" {
+			httpServer.HandleFunc(opts.HTTPStatusEndpoint, func(w http.ResponseWriter, r *http.Request) {
+				statusR := StatusResponse{
+					ServiceName:    serviceName,
+					ServiceGroup:   serviceGroup,
+					ServiceVersion: serviceVersion,
+				}
+
+				enc := json.NewEncoder(w)
+				enc.Encode(statusR)
+
+				w.Header().Set("Content-Type", "application/json")
+			})
+		}
+	}
+
 	return &Service{
-		quitChannel:    quitChan,
-		transport:      transport,
-		adapter:        adapter,
-		Opts:           opts,
-		serviceGroup:   serviceGroup,
-		serviceName:    serviceName,
-		serviceVersion: serviceVersion,
+		quitChannel:       quitChan,
+		transport:         transport,
+		adapter:           adapter,
+		Opts:              opts,
+		HTTPServer:        httpServer,
+		HTTPServerAddress: opts.HTTPServerAddress,
+		serviceGroup:      serviceGroup,
+		serviceName:       serviceName,
+		serviceVersion:    serviceVersion,
 	}
 
 }
@@ -121,6 +164,12 @@ func (s *Service) HandleFunc(pattern string, handler func(TopicWriter, []byte)) 
 }
 
 func (s *Service) Serve() os.Signal {
+	if s.HTTPServer != nil && s.HTTPServerAddress != "" {
+		go func(addr string, smux *http.ServeMux) {
+			http.ListenAndServe(addr, smux)
+		}(s.HTTPServerAddress, s.HTTPServer)
+	}
+
 	signal.Notify(s.quitChannel, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGSTOP, syscall.SIGABRT)
 	sig := <-s.quitChannel
 	return sig
