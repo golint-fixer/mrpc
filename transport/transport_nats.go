@@ -23,7 +23,11 @@ func NewNATSTransport(servers []string) *NATSTransport {
 }
 
 func (n *NATSTransport) Ready() bool {
-	return n.init
+	if !n.init || n.conn == nil {
+		return false
+	}
+
+	return n.conn.Status() == nats.CONNECTED
 }
 
 func (n *NATSTransport) Connect() error {
