@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 )
@@ -58,6 +60,8 @@ type ServiceOptions struct {
 	HTTPServer         *http.ServeMux
 	HTTPServerAddress  string // Disable HTTP server if address is empty
 	HTTPStatusEndpoint string
+	DumpMessages       bool // If set all messages will be written in folder DumpMessagesFolder as json files
+	DumpMessagesFolder string
 }
 
 var DefaultOptions = ServiceOptions{
@@ -66,6 +70,8 @@ var DefaultOptions = ServiceOptions{
 	HTTPServer:         nil,
 	HTTPServerAddress:  "",
 	HTTPStatusEndpoint: "/status",
+	DumpMessages:       false,
+	DumpMessagesFolder: "/tmp/mrpcdump",
 }
 
 type Service struct {
@@ -163,22 +169,37 @@ func (s *Service) HandleFunc(pattern string, handler func(TopicWriter, []byte)) 
 	s.Handle(pattern, HandlerFunc(handler))
 }
 
-func (s *Service) Serve() os.Signal {
+func (s *Service) Serve() error {
+	err := EnsureConnected(s.transport)
+	if err != nil {
+		return err
+	}
+
 	if s.HTTPServer != nil && s.HTTPServerAddress != "" {
 		go func(addr string, smux *http.ServeMux) {
 			http.ListenAndServe(addr, smux)
 		}(s.HTTPServerAddress, s.HTTPServer)
 	}
 
-	signal.Notify(s.quitChannel, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGSTOP, syscall.SIGABRT)
+	signal.Notify(s.quitChannel, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGSTOP, syscall.SIGABRT, syscall.SIGKILL, syscall.SIGINT)
 	sig := <-s.quitChannel
-	return sig
+	return fmt.Errorf("Signal received: %v", sig)
 }
 
 func (s *Service) Publish(topicName string, data []byte) (err error) {
 	s.adapter.ProcessMessage(MESSAGETYPE_PUBLISH, topicName, data)
 	err = EnsureConnected(s.transport)
 	return s.transport.Publish(topicName, data)
+}
+
+func WriteRawMessage(topicName string, pathName string, reqData, respData []byte) {
+	tstamp := time.Now().Unix()
+
+	fileReq := filepath.Join(pathName, fmt.Sprintf("%d-%s-req.json", tstamp, topicName))
+	fileResp := filepath.Join(pathName, fmt.Sprintf("%d-%s-res.json", tstamp, topicName))
+
+	ioutil.WriteFile(fileReq, reqData, 0777)
+	ioutil.WriteFile(fileResp, respData, 0777)
 }
 
 func (s *Service) Request(topicName string, data []byte, timeout time.Duration) (respData []byte, err error) {
@@ -189,6 +210,11 @@ func (s *Service) Request(topicName string, data []byte, timeout time.Duration) 
 	}
 	respData, err = s.transport.Request(topicName, data, timeout)
 	s.adapter.ProcessMessage(MESSAGETYPE_RESPONSE, topicName, respData)
+
+	if s.Opts.DumpMessages {
+		WriteRawMessage(topicName, s.Opts.DumpMessagesFolder, data, respData)
+	}
+
 	return respData, err
 }
 
