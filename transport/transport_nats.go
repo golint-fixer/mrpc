@@ -1,10 +1,11 @@
 package transport
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/miracl/mrpc"
-	"github.com/nats-io/nats"
+	"github.com/nats-io/go-nats"
 )
 
 type NATSTransport struct {
@@ -33,6 +34,20 @@ func (n *NATSTransport) Ready() bool {
 func (n *NATSTransport) Connect() error {
 	opts := nats.DefaultOptions
 	opts.Servers = n.servers
+	opts.PingInterval = 2 * time.Second
+	opts.Timeout = 1 * time.Second
+	opts.ReconnectWait = 1 * time.Second
+	opts.MaxReconnect = -1
+
+	opts.DisconnectedCB = func(nc *nats.Conn) {
+		fmt.Printf("NATS disconnected! Last Error: %v; URL: %v; ServerId: %v; Reconnects: %v\n", nc.LastError(), nc.ConnectedUrl(), nc.ConnectedServerId(), nc.Stats().Reconnects)
+	}
+	opts.ClosedCB = func(nc *nats.Conn) {
+		fmt.Printf("NATS connection closed! Last Error: %v; URL: %v; ServerId: %v; Reconnects: %v\n", nc.LastError(), nc.ConnectedUrl(), nc.ConnectedServerId(), nc.Stats().Reconnects)
+	}
+	opts.ReconnectedCB = func(nc *nats.Conn) {
+		fmt.Printf("NATS reconnected! Last Error: %v; URL: %v; ServerId: %v; Reconnects: %v\n", nc.LastError(), nc.ConnectedUrl(), nc.ConnectedServerId(), nc.Stats().Reconnects)
+	}
 
 	var err error
 
