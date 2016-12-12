@@ -157,16 +157,14 @@ func (s *Service) Handle(topic string, handler TopicHandler) error {
 		return err
 	}
 
-	s.transport.Subscribe(s.GetFQTopic(topic), CHAN_NAME, func(responseTopic, requestTopic string, data []byte) {
+	return s.transport.Subscribe(s.GetFQTopic(topic), CHAN_NAME, func(responseTopic, requestTopic string, data []byte) {
 		s.adapter.ProcessMessage(MESSAGETYPE_SUBSCRIBE, requestTopic, data)
 		handler.Serve(&TopicClient{responseTopic, s.transport}, requestTopic, data)
 	})
-
-	return nil
 }
 
-func (s *Service) HandleFunc(pattern string, handler func(TopicWriter, []byte)) {
-	s.Handle(pattern, HandlerFunc(handler))
+func (s *Service) HandleFunc(pattern string, handler func(TopicWriter, []byte)) error {
+	return s.Handle(pattern, HandlerFunc(handler))
 }
 
 func (s *Service) Serve() error {
