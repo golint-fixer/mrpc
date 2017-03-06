@@ -1,21 +1,22 @@
 package mrpc
 
 const (
-	MESSAGETYPE_REQUEST = iota
-	MESSAGETYPE_RESPONSE
-	MESSAGETYPE_PUBLISH
-	MESSAGETYPE_SUBSCRIBE
+	reqMessageType MessageType = iota
+	resMessageType
+	pubMessageType
+	subMessageType
 )
 
+// MessageType is the type of the message
+type MessageType int
+
+// MessageAdapter is used to intercept and process messages
 type MessageAdapter interface {
-	SetServiceInfo(serviceName, serviceGroup, serviceVersion string)
-	ProcessMessage(messageType int, topicName string, data []byte) error
+	ProcessMessage(t MessageType, topicName string, data []byte) error
 }
 
-type EmptyMessageAdapter struct{}
+type emptyMessageAdapter struct{}
 
-func (a *EmptyMessageAdapter) SetServiceInfo(serviceName, serviceGroup, serviceVersion string) {}
-
-func (a *EmptyMessageAdapter) ProcessMessage(messageType int, topicName string, data []byte) error {
+func (a *emptyMessageAdapter) ProcessMessage(t MessageType, topicName string, data []byte) error {
 	return nil
 }
