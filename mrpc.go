@@ -23,6 +23,7 @@ type TopicHandler interface {
 // TopicWriter writes data to topic
 type TopicWriter interface {
 	Write(data []byte) error
+	Topic() string
 }
 
 // The SubscribeHandlerFunc type is an adapter to allow the use of ordinary
@@ -45,6 +46,10 @@ type TopicClient struct {
 // Write writes data to the transport
 func (t *TopicClient) Write(data []byte) error {
 	return t.transport.Publish(t.topic, data)
+}
+
+func (t *TopicClient) Topic() string {
+	return t.topic
 }
 
 // Service is MRPC topic router

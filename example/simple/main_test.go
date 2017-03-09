@@ -11,12 +11,13 @@ import (
 	"time"
 )
 
-func TestMain(t *testing.T) {
+func TestSimpleExample(t *testing.T) {
 	// Pick a port for the http status server
 	port := getRandomFreePort()
 
 	os.Args = []string{"example", "-addr", fmt.Sprintf(":%v", port)}
 	go main()
+	<-ready
 
 	// Block so the main starts
 	time.Sleep(100 * time.Millisecond)
@@ -46,8 +47,7 @@ func TestMain(t *testing.T) {
 		t.Errorf("Unexpected status response: %v", s)
 	}
 
-	// service := getService()
-	hires, err := service.Request("example.hi.proxy", nil, timeout)
+	hires, err := service.Request("example.hi", nil, timeout)
 	if err != nil {
 		t.Errorf("Requesting example.hi.proxy: Unexpected error %v", err)
 	}

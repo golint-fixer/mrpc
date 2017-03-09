@@ -16,6 +16,6 @@ go get -u github.com/miracl/mrpc
 
 ## Example
 ```
-cd example/
+cd example/simple
 go run main.go
 ```
