@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/miracl/mrpc"
-	"github.com/miracl/mrpc/transport"
+	"github.com/miracl/mrpc/transport/mem"
 )
 
 var (
@@ -30,7 +30,7 @@ func main() {
 
 	// Create the service
 	service, _ = mrpc.NewService(
-		transport.NewMem(),
+		mem.New(),
 		func(s *mrpc.Service) error {
 			s.Group = group
 			s.Name = name

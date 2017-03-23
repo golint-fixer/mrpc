@@ -1,10 +1,12 @@
-package transport
+package nats
 
 import (
 	"time"
 
-	"github.com/miracl/mrpc"
 	"github.com/nats-io/go-nats"
+
+	"github.com/miracl/mrpc"
+	"github.com/miracl/mrpc/transport"
 )
 
 const queue = "mrpc"
@@ -24,7 +26,7 @@ type NATS struct {
 }
 
 // NewNATS is constructor for NATS
-func NewNATS(conn natsConn) *NATS {
+func New(conn natsConn) *NATS {
 	return &NATS{Conn: conn, Queue: queue}
 }
 
@@ -46,7 +48,7 @@ func (n *NATS) Request(topicName string, data []byte, timeout time.Duration) (re
 	msg, err := n.Conn.Request(topicName, data, timeout)
 	if err != nil {
 		if err == nats.ErrTimeout {
-			return nil, errTimeout
+			return nil, transport.ErrTimeout
 		}
 		return nil, err
 	}

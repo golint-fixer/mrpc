@@ -1,10 +1,11 @@
-package transport
+package mem
 
 import (
 	"sync"
 	"time"
 
 	"github.com/miracl/mrpc"
+	"github.com/miracl/mrpc/transport"
 )
 
 type subscribeHandlerFunc func(responseTopic, requestTopic string, data []byte)
@@ -17,7 +18,7 @@ type Mem struct {
 }
 
 // NewMem creates new in memory transport
-func NewMem() *Mem {
+func New() *Mem {
 	subs := map[string]mrpc.SubscribeHandlerFunc{}
 	return &Mem{subs, sync.Mutex{}}
 }
@@ -72,6 +73,6 @@ func (t *Mem) Request(topic string, data []byte, timeout time.Duration) ([]byte,
 	case data = <-resCh:
 		return data, nil
 	case <-timeoutCh:
-		return nil, errTimeout
+		return nil, transport.ErrTimeout
 	}
 }

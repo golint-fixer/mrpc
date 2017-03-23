@@ -1,10 +1,11 @@
-package transport
+package nats
 
 import (
 	"fmt"
 	"testing"
 	"time"
 
+	"github.com/miracl/mrpc/transport"
 	nats "github.com/nats-io/go-nats"
 )
 
@@ -22,7 +23,7 @@ func TestNewNats(t *testing.T) {
 
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("Case%v", i), func(t *testing.T) {
-			trans := NewNATS(tc.conn)
+			trans := New(tc.conn)
 			if trans.Conn == nil {
 				t.Fatalf("Transport doesn't have nats connection")
 			}
@@ -65,7 +66,7 @@ func TestNatsRequest(t *testing.T) {
 	// Test nats Timeout
 	trans.Conn.(*natsConnMock).reqerr = nats.ErrTimeout
 	_, err := trans.Request("test", []byte{}, 1*time.Millisecond)
-	if !IsTimeout(err) {
+	if !transport.IsTimeout(err) {
 		t.Fatalf("Expected timeout: %v", err)
 	}
 	trans.Conn.(*natsConnMock).reqerr = nil

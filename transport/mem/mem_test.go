@@ -1,18 +1,20 @@
-package transport
+package mem
 
 import (
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/miracl/mrpc/transport"
 )
 
 func TestMemReq(t *testing.T) {
 	msg := "test response"
-	trans := NewMem()
+	trans := New()
 
 	_, err := trans.Request("topic", []byte("test"), 1*time.Second)
 	fmt.Println(err)
-	if !IsTimeout(err) {
+	if !transport.IsTimeout(err) {
 		t.Fatalf("Expected timeout")
 	}
 

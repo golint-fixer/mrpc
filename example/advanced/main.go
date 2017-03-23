@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/miracl/mrpc"
-	"github.com/miracl/mrpc/transport"
+	"github.com/miracl/mrpc/transport/mem"
 )
 
 var (
@@ -39,7 +39,7 @@ func main() {
 	flag.Parse()
 
 	// Create the service
-	service, _ = mrpc.NewService(transport.NewMem())
+	service, _ = mrpc.NewService(mem.New())
 	ready <- struct{}{}
 
 	// Request handler
