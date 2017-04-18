@@ -1,223 +1,170 @@
-// Service running as handlers on message queue topics
-
 package mrpc
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
-	"syscall"
 	"time"
 )
 
 const (
-	CHAN_NAME = "process"
-
-	DefaultRequestTimeout    = 1 * time.Second
-	DefaultErrorHandlerTopic = "errors"
+	defaultGroup = ""
+	defaultName  = "service"
+	defaultVer   = "0.1"
 )
 
-var (
-	ErrorRequestTimeout = errors.New("mrpc: Request Timeout")
-)
-
-// Objects implementing the TopicHandler interface can be
-// registered to serve a particular topic.
+// TopicHandler serves MRPC requests
 type TopicHandler interface {
 	Serve(w TopicWriter, requestTopic string, data []byte)
 }
 
-// A TopicWriter interface is used for create response for bidirectional
-// handlers.
+// TopicWriter writes data to topic
 type TopicWriter interface {
 	Write(data []byte) error
+	Topic() string
 }
 
-// Implementation of TopicWriter
+// The SubscribeHandlerFunc type is an adapter to allow the use of ordinary
+// functions as MRPC handlers.
+type SubscribeHandlerFunc func(responseTopic, requestTopic string, data []byte)
+
+// Transport is a way of making MPRC requests
+type Transport interface {
+	Subscribe(topic string, handler SubscribeHandlerFunc) error
+	Publish(topic string, data []byte) error
+	Request(topic string, data []byte, timeout time.Duration) (respData []byte, err error)
+}
+
+// TopicClient is implementation of TopicWriter
 type TopicClient struct {
 	topic     string
 	transport Transport
 }
 
+// Write writes data to the transport
 func (t *TopicClient) Write(data []byte) error {
 	return t.transport.Publish(t.topic, data)
 }
 
-type StatusResponse struct {
-	ServiceName    string
-	ServiceGroup   string
-	ServiceVersion string
+func (t *TopicClient) Topic() string {
+	return t.topic
 }
 
-type ServiceOptions struct {
-	RequestTimeout     time.Duration
-	ErrorHandlerTopic  string
-	HTTPServer         *http.ServeMux
-	HTTPServerAddress  string // Disable HTTP server if address is empty
-	HTTPStatusEndpoint string
-	DumpMessages       bool // If set all messages will be written in folder DumpMessagesFolder as json files
-	DumpMessagesFolder string
-}
-
-var DefaultOptions = ServiceOptions{
-	RequestTimeout:     DefaultRequestTimeout,
-	ErrorHandlerTopic:  DefaultErrorHandlerTopic,
-	HTTPServer:         nil,
-	HTTPServerAddress:  "",
-	HTTPStatusEndpoint: "/status",
-	DumpMessages:       false,
-	DumpMessagesFolder: "/tmp/mrpcdump",
-}
-
+// Service is MRPC topic router
 type Service struct {
-	quitChannel chan os.Signal
+	Group   string
+	Name    string
+	Version string
 
-	transport Transport
-	adapter   MessageAdapter
-	Opts      ServiceOptions
+	T Transport
 
-	MessageAdapter    MessageAdapter
-	HTTPServer        *http.ServeMux
-	HTTPServerAddress string
+	Adapter MessageAdapter
 
-	serviceGroup   string
-	serviceName    string
-	serviceVersion string
+	statusServer *http.Server
+	quitChannel  chan os.Signal
 }
 
-func NewService(transport Transport, serviceGroup, serviceName, serviceVersion string, options *ServiceOptions) *Service {
-	return NewServiceWithAdapter(transport, nil, serviceGroup, serviceName, serviceVersion, options)
-}
+// NewService returns new MRPC service
+func NewService(t Transport, opts ...func(*Service) error) (*Service, error) {
+	s := Service{
+		Group:   defaultGroup,
+		Name:    defaultName,
+		Version: defaultVer,
 
-func NewServiceWithAdapter(transport Transport, adapter MessageAdapter, serviceGroup, serviceName, serviceVersion string, options *ServiceOptions) *Service {
-	if adapter == nil {
-		adapter = &EmptyMessageAdapter{}
-	}
-	adapter.SetServiceInfo(serviceGroup, serviceName, serviceVersion)
+		T: t,
 
-	quitChan := make(chan os.Signal)
+		Adapter: &emptyMessageAdapter{},
 
-	var opts ServiceOptions
-	if options == nil {
-		opts = DefaultOptions
-	} else {
-		opts = *options
+		quitChannel: make(chan os.Signal),
 	}
 
-	var httpServer *http.ServeMux
-
-	if opts.HTTPServerAddress != "" {
-		if opts.HTTPServer != nil {
-			httpServer = opts.HTTPServer
-		} else {
-			httpServer = http.NewServeMux()
-		}
-
-		if opts.HTTPStatusEndpoint != "" {
-			httpServer.HandleFunc(opts.HTTPStatusEndpoint, func(w http.ResponseWriter, r *http.Request) {
-				statusR := StatusResponse{
-					ServiceName:    serviceName,
-					ServiceGroup:   serviceGroup,
-					ServiceVersion: serviceVersion,
-				}
-
-				enc := json.NewEncoder(w)
-				enc.Encode(statusR)
-
-				w.Header().Set("Content-Type", "application/json")
-			})
+	for _, opt := range opts {
+		if err := opt(&s); err != nil {
+			return nil, err
 		}
 	}
 
-	return &Service{
-		quitChannel:       quitChan,
-		transport:         transport,
-		adapter:           adapter,
-		Opts:              opts,
-		HTTPServer:        httpServer,
-		HTTPServerAddress: opts.HTTPServerAddress,
-		serviceGroup:      serviceGroup,
-		serviceName:       serviceName,
-		serviceVersion:    serviceVersion,
-	}
-
+	return &s, nil
 }
 
+// GetFQTopic returns the full topic name
 func (s *Service) GetFQTopic(topic string) string {
-	return fmt.Sprintf("%s.%s", s.serviceName, topic)
+	return fmt.Sprintf("%s.%s", s.Name, topic)
 }
 
+// Handle registers a handler for particular topic
 func (s *Service) Handle(topic string, handler TopicHandler) error {
-	if err := EnsureConnected(s.transport); err != nil {
-		return err
-	}
-
-	return s.transport.Subscribe(s.GetFQTopic(topic), CHAN_NAME, func(responseTopic, requestTopic string, data []byte) {
-		s.adapter.ProcessMessage(MESSAGETYPE_SUBSCRIBE, requestTopic, data)
-		handler.Serve(&TopicClient{responseTopic, s.transport}, requestTopic, data)
-	})
+	return s.T.Subscribe(
+		s.GetFQTopic(topic),
+		func(responseTopic, requestTopic string, data []byte) {
+			s.Adapter.ProcessMessage(subMessageType, requestTopic, data)
+			handler.Serve(&TopicClient{responseTopic, s.T}, requestTopic, data)
+		},
+	)
 }
 
+// HandleFunc registers a handler functions for particular topic
 func (s *Service) HandleFunc(pattern string, handler func(TopicWriter, []byte)) error {
 	return s.Handle(pattern, HandlerFunc(handler))
 }
 
-func (s *Service) Serve() error {
-	err := EnsureConnected(s.transport)
+// HandlerFunc is function implementing the TopicHandler interface
+type HandlerFunc func(TopicWriter, []byte)
+
+// Serve calls the HandlerFunc
+func (f HandlerFunc) Serve(w TopicWriter, requestTopic string, data []byte) {
+	f(w, data)
+}
+
+// Publish to a topic
+func (s *Service) Publish(topic string, data []byte) (err error) {
+	s.Adapter.ProcessMessage(pubMessageType, topic, data)
+	return s.T.Publish(topic, data)
+}
+
+// Request does a MRPC request and waits for response
+func (s *Service) Request(topic string, data []byte, timeout time.Duration) (respData []byte, err error) {
+	s.Adapter.ProcessMessage(reqMessageType, topic, data)
+	respData, err = s.T.Request(topic, data, timeout)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	if s.HTTPServer != nil && s.HTTPServerAddress != "" {
-		go func(addr string, smux *http.ServeMux) {
-			http.ListenAndServe(addr, smux)
-		}(s.HTTPServerAddress, s.HTTPServer)
+	s.Adapter.ProcessMessage(resMessageType, topic, respData)
+	return respData, err
+}
+
+// Serve start the MRPC server
+func (s *Service) Serve() error {
+	// Start status http service if enabled
+	if s.statusServer != nil {
+		go s.statusServer.ListenAndServe()
 	}
 
-	signal.Notify(s.quitChannel, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGSTOP, syscall.SIGABRT, syscall.SIGKILL, syscall.SIGINT)
+	signal.Notify(s.quitChannel, os.Interrupt)
 	sig := <-s.quitChannel
 	return fmt.Errorf("Signal received: %v", sig)
 }
 
-func (s *Service) Publish(topicName string, data []byte) (err error) {
-	s.adapter.ProcessMessage(MESSAGETYPE_PUBLISH, topicName, data)
-	err = EnsureConnected(s.transport)
-	return s.transport.Publish(topicName, data)
-}
-
-func WriteRawMessage(topicName string, pathName string, reqData, respData []byte) {
-	tstamp := time.Now().Unix()
-
-	fileReq := filepath.Join(pathName, fmt.Sprintf("%d-%s-req.json", tstamp, topicName))
-	fileResp := filepath.Join(pathName, fmt.Sprintf("%d-%s-res.json", tstamp, topicName))
-
-	ioutil.WriteFile(fileReq, reqData, 0777)
-	ioutil.WriteFile(fileResp, respData, 0777)
-}
-
-func (s *Service) Request(topicName string, data []byte, timeout time.Duration) (respData []byte, err error) {
-	s.adapter.ProcessMessage(MESSAGETYPE_REQUEST, topicName, data)
-	err = EnsureConnected(s.transport)
-	if err != nil {
-		return
+// EnableStatus returns can be added to NewService call to enable status
+func EnableStatus(addr string) func(*Service) error {
+	return func(s *Service) error {
+		s.statusServer = &http.Server{Addr: addr, Handler: s}
+		return nil
 	}
-	respData, err = s.transport.Request(topicName, data, timeout)
-	s.adapter.ProcessMessage(MESSAGETYPE_RESPONSE, topicName, respData)
-
-	if s.Opts.DumpMessages {
-		WriteRawMessage(topicName, s.Opts.DumpMessagesFolder, data, respData)
-	}
-
-	return respData, err
 }
 
-type HandlerFunc func(TopicWriter, []byte)
+type statusResponse struct {
+	Name    string `json:"name"`
+	Group   string `json:"group"`
+	Version string `json:"version"`
+}
 
-func (f HandlerFunc) Serve(w TopicWriter, requestTopic string, data []byte) {
-	f(w, data)
+// ServeHTTP serves status information on http
+func (s *Service) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	enc := json.NewEncoder(w)
+	enc.Encode(statusResponse{s.Name, s.Group, s.Version})
+	w.Header().Set("Content-Type", "application/json")
 }

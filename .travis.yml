@@ -1,0 +1,23 @@
+language: go
+
+go:
+  - 1.x
+  - master
+
+os:
+  - linux
+  - osx
+
+install:
+  - go get ./...
+  - if [ "$TRAVIS_GO_VERSION" = "master" ] && [ "$TRAVIS_OS_NAME" = "linux" ]; then run_analyzers=true; fi;
+  - if [ "$run_analyzers" = true ]; then go get github.com/golang/lint/golint; fi;
+  - if [ "$run_analyzers" = true ]; then go get github.com/mattn/goveralls; fi;
+
+before_script:
+  - if [ "$run_analyzers" = true ]; then go vet $(go list ./... | grep -v vendor); fi;
+  - if [ "$run_analyzers" = true ]; then test -z "$(gofmt -s -l . 2>&1 | grep -v vendor | tee /dev/stderr)"; fi;
+  - if [ "$run_analyzers" = true ]; then go list ./... | grep -v /vendor/ | xargs -L1 golint; fi;
+
+script:
+  - if [ "$run_analyzers" = true ]; then goveralls -service=travis-ci; else go test -race $(go list ./... | grep -v /vendor/); fi;
