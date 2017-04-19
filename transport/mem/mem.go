@@ -14,13 +14,13 @@ type subscribeHandlerFunc func(responseTopic, requestTopic string, data []byte)
 // Mem is intended for testing.
 type Mem struct {
 	subs map[string]mrpc.SubscribeHandlerFunc
-	mu   sync.Mutex
+	mu   sync.RWMutex
 }
 
 // NewMem creates new in memory transport
 func New() *Mem {
 	subs := map[string]mrpc.SubscribeHandlerFunc{}
-	return &Mem{subs, sync.Mutex{}}
+	return &Mem{subs, sync.RWMutex{}}
 }
 
 // Subscribe add a handler for topic
@@ -33,9 +33,9 @@ func (t *Mem) Subscribe(topic string, handler mrpc.SubscribeHandlerFunc) error {
 
 // Publish checks if there is a subscriber and executes it
 func (t *Mem) Publish(topic string, data []byte) error {
-	t.mu.Lock()
+	t.mu.RLock()
 	h, ok := t.subs[topic]
-	t.mu.Unlock()
+	t.mu.RUnlock()
 	if ok {
 		h("", topic, data)
 	}
@@ -55,9 +55,9 @@ func (t *Mem) Request(topic string, data []byte, timeout time.Duration) ([]byte,
 	)
 
 	go func() {
-		t.mu.Lock()
+		t.mu.RLock()
 		h, ok := t.subs[topic]
-		t.mu.Unlock()
+		t.mu.RUnlock()
 		if ok {
 			h(resTopic, topic, data)
 		}
@@ -70,8 +70,8 @@ func (t *Mem) Request(topic string, data []byte, timeout time.Duration) ([]byte,
 	}()
 
 	select {
-	case data = <-resCh:
-		return data, nil
+	case d := <-resCh:
+		return d, nil
 	case <-timeoutCh:
 		return nil, transport.ErrTimeout
 	}
