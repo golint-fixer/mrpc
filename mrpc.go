@@ -48,6 +48,7 @@ func (t *TopicClient) Write(data []byte) error {
 	return t.transport.Publish(t.topic, data)
 }
 
+// Topic returns the clients topic as a string
 func (t *TopicClient) Topic() string {
 	return t.topic
 }

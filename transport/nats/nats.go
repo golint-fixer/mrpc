@@ -25,7 +25,7 @@ type NATS struct {
 	Queue string
 }
 
-// NewNATS is constructor for NATS
+// New is constructor for NATS
 func New(conn natsConn) *NATS {
 	return &NATS{Conn: conn, Queue: queue}
 }

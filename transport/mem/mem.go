@@ -17,7 +17,7 @@ type Mem struct {
 	mu   sync.RWMutex
 }
 
-// NewMem creates new in memory transport
+// New creates new in memory transport
 func New() *Mem {
 	subs := map[string]mrpc.SubscribeHandlerFunc{}
 	return &Mem{subs, sync.RWMutex{}}
