@@ -54,13 +54,13 @@ func (t *TopicClient) Topic() string {
 
 // Service is MRPC topic router
 type Service struct {
-	Group   string
-	Name    string
-	Version string
+	group   string
+	name    string
+	version string
 
-	T Transport
+	t Transport
 
-	Adapter MessageAdapter
+	adapter MessageAdapter
 
 	statusSrv *http.Server
 }
@@ -68,13 +68,13 @@ type Service struct {
 // NewService returns new MRPC service
 func NewService(t Transport, opts ...func(*Service) error) (*Service, error) {
 	s := Service{
-		Group:   defaultGroup,
-		Name:    defaultName,
-		Version: defaultVer,
+		group:   defaultGroup,
+		name:    defaultName,
+		version: defaultVer,
 
-		T: t,
+		t: t,
 
-		Adapter: &emptyMessageAdapter{},
+		adapter: &emptyMessageAdapter{},
 	}
 
 	for _, opt := range opts {
@@ -88,16 +88,16 @@ func NewService(t Transport, opts ...func(*Service) error) (*Service, error) {
 
 // GetFQTopic returns the full topic name
 func (s *Service) GetFQTopic(topic string) string {
-	return fmt.Sprintf("%s.%s", s.Name, topic)
+	return fmt.Sprintf("%s.%s", s.name, topic)
 }
 
 // Handle registers a handler for particular topic
 func (s *Service) Handle(topic string, handler TopicHandler) error {
-	return s.T.Subscribe(
+	return s.t.Subscribe(
 		s.GetFQTopic(topic),
 		func(responseTopic, requestTopic string, data []byte) {
-			s.Adapter.ProcessMessage(subMessageType, requestTopic, data)
-			handler.Serve(&TopicClient{responseTopic, s.T}, requestTopic, data)
+			s.adapter.ProcessMessage(subMessageType, requestTopic, data)
+			handler.Serve(&TopicClient{responseTopic, s.t}, requestTopic, data)
 		},
 	)
 }
@@ -117,19 +117,19 @@ func (f HandlerFunc) Serve(w TopicWriter, requestTopic string, data []byte) {
 
 // Publish to a topic
 func (s *Service) Publish(topic string, data []byte) (err error) {
-	s.Adapter.ProcessMessage(pubMessageType, topic, data)
-	return s.T.Publish(topic, data)
+	s.adapter.ProcessMessage(pubMessageType, topic, data)
+	return s.t.Publish(topic, data)
 }
 
 // Request does a MRPC request and waits for response
 func (s *Service) Request(topic string, data []byte, timeout time.Duration) (respData []byte, err error) {
-	s.Adapter.ProcessMessage(reqMessageType, topic, data)
-	respData, err = s.T.Request(topic, data, timeout)
+	s.adapter.ProcessMessage(reqMessageType, topic, data)
+	respData, err = s.t.Request(topic, data, timeout)
 	if err != nil {
 		return nil, err
 	}
 
-	s.Adapter.ProcessMessage(resMessageType, topic, respData)
+	s.adapter.ProcessMessage(resMessageType, topic, respData)
 	return respData, err
 }
 
@@ -150,14 +150,6 @@ func (s *Service) Stop(ctx context.Context) error {
 	return nil
 }
 
-// EnableStatus returns can be added to NewService call to enable status
-func EnableStatus(addr string) func(*Service) error {
-	return func(s *Service) error {
-		s.statusSrv = &http.Server{Addr: addr, Handler: s}
-		return nil
-	}
-}
-
 type statusResponse struct {
 	Name    string `json:"name"`
 	Group   string `json:"group"`
@@ -167,6 +159,6 @@ type statusResponse struct {
 // ServeHTTP serves status information on http
 func (s *Service) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	enc := json.NewEncoder(w)
-	enc.Encode(statusResponse{s.Name, s.Group, s.Version})
+	enc.Encode(statusResponse{s.name, s.group, s.version})
 	w.Header().Set("Content-Type", "application/json")
 }

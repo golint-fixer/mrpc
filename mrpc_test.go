@@ -41,7 +41,7 @@ func TestNewService(t *testing.T) {
 
 func TestNewServiceWithStatus(t *testing.T) {
 	trans := newFakeTransport()
-	s, err := NewService(trans, EnableStatus("127.0.0.1:8080"))
+	s, err := NewService(trans, WithStatus("127.0.0.1:8080"))
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -155,10 +155,7 @@ func TestGetFQTopic(t *testing.T) {
 			"service.topic",
 		},
 		{
-			func(s *Service) error {
-				s.Name = "test"
-				return nil
-			},
+			WithName("test"),
 			"topic",
 			"test.topic",
 		},

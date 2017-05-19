@@ -31,13 +31,8 @@ func main() {
 	// Create the service
 	service, _ = mrpc.NewService(
 		mem.New(),
-		func(s *mrpc.Service) error {
-			s.Group = group
-			s.Name = name
-			s.Version = version
-			return nil
-		},
-		mrpc.EnableStatus(*address), // Enable http status endpoint
+		mrpc.WithNGV(name, group, version),
+		mrpc.WithStatus(*address), // Enable http status endpoint
 	)
 	ready <- struct{}{}
 
