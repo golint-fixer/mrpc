@@ -1,11 +1,10 @@
 package mrpc
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
-	"os/signal"
 	"time"
 )
 
@@ -63,8 +62,7 @@ type Service struct {
 
 	Adapter MessageAdapter
 
-	statusServer *http.Server
-	quitChannel  chan os.Signal
+	statusSrv *http.Server
 }
 
 // NewService returns new MRPC service
@@ -77,8 +75,6 @@ func NewService(t Transport, opts ...func(*Service) error) (*Service, error) {
 		T: t,
 
 		Adapter: &emptyMessageAdapter{},
-
-		quitChannel: make(chan os.Signal),
 	}
 
 	for _, opt := range opts {
@@ -137,22 +133,27 @@ func (s *Service) Request(topic string, data []byte, timeout time.Duration) (res
 	return respData, err
 }
 
-// Serve start the MRPC server
+// Serve starts the MRPC status server
 func (s *Service) Serve() error {
-	// Start status http service if enabled
-	if s.statusServer != nil {
-		go s.statusServer.ListenAndServe()
+	if s.statusSrv != nil {
+		return s.statusSrv.ListenAndServe()
+	}
+	return fmt.Errorf("status not enabled")
+}
+
+// Stop stops the http status server if exists
+func (s *Service) Stop(ctx context.Context) error {
+	if s.statusSrv != nil {
+		return s.statusSrv.Shutdown(ctx)
 	}
 
-	signal.Notify(s.quitChannel, os.Interrupt)
-	sig := <-s.quitChannel
-	return fmt.Errorf("Signal received: %v", sig)
+	return nil
 }
 
 // EnableStatus returns can be added to NewService call to enable status
 func EnableStatus(addr string) func(*Service) error {
 	return func(s *Service) error {
-		s.statusServer = &http.Server{Addr: addr, Handler: s}
+		s.statusSrv = &http.Server{Addr: addr, Handler: s}
 		return nil
 	}
 }

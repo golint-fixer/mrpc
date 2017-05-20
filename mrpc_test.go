@@ -50,7 +50,7 @@ func TestNewServiceWithStatus(t *testing.T) {
 		t.Fatalf("Expected service")
 	}
 
-	if s.statusServer == nil {
+	if s.statusSrv == nil {
 		t.Fatalf("Expected service with status endpoint")
 	}
 
@@ -91,7 +91,7 @@ func TestNewServiceWithStatus(t *testing.T) {
 	}
 
 	// Test http status endpoint
-	go func() { s.Serve() }()
+	go s.Serve()
 
 	// Block so the server starts
 	time.Sleep(1 * time.Millisecond)
@@ -113,6 +113,24 @@ func TestNewServiceWithStatus(t *testing.T) {
 
 	if status.Name != defaultName || status.Version != defaultVer || status.Group != defaultGroup {
 		t.Fatalf("Status response not matching: %v", status)
+	}
+
+	// Stop the http status server
+	s.Stop(nil)
+	statusResp, _ = http.Get("http://127.0.0.1:8080")
+	if statusResp != nil {
+		t.Fatal("Status server not stopped")
+	}
+}
+
+func TestServeNoStatus(t *testing.T) {
+	s, _ := NewService(newFakeTransport())
+	if err := s.Serve(); err == nil {
+		t.Error("can't serve without status enabled")
+	}
+
+	if err := s.Stop(nil); err != nil {
+		t.Errorf("Unexpected error: %v", err)
 	}
 }
 

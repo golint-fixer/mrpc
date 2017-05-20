@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"flag"
 	"log"
+	"os"
+	"os/signal"
 	"time"
 
 	"github.com/miracl/mrpc"
@@ -84,7 +86,10 @@ func main() {
 
 	// Start the service
 	log.Printf("Starting MRPC service")
-	log.Fatalf("Service stopped: %v", service.Serve())
+
+	stop := make(chan os.Signal)
+	signal.Notify(stop, os.Interrupt)
+	log.Fatalf("Service stopped: %v", <-stop)
 }
 
 func logRequest(topic string) {
