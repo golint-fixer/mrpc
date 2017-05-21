@@ -40,9 +40,12 @@ type dataWithMeta struct {
 func main() {
 	flag.Parse()
 
+	// Create the transport
+	trans := mem.New()
+	defer trans.Stop()
+
 	// Create the service
-	service, _ = mrpc.NewService(mem.New())
-	ready <- struct{}{}
+	service, _ = mrpc.NewService(trans)
 
 	// Request handler
 	service.HandleFunc("a", func(w mrpc.TopicWriter, data []byte) {
@@ -86,9 +89,9 @@ func main() {
 
 	// Start the service
 	log.Printf("Starting MRPC service")
-
 	stop := make(chan os.Signal)
 	signal.Notify(stop, os.Interrupt)
+	ready <- struct{}{}
 	log.Fatalf("Service stopped: %v", <-stop)
 }
 

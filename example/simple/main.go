@@ -28,13 +28,16 @@ const (
 func main() {
 	flag.Parse()
 
+	// Create the transport
+	trans := mem.New()
+	defer trans.Stop()
+
 	// Create the service
 	service, _ = mrpc.NewService(
-		mem.New(),
+		trans,
 		mrpc.WithNGV(name, group, version),
 		mrpc.WithStatus(*address), // Enable http status endpoint
 	)
-	ready <- struct{}{}
 
 	// Request handler
 	service.HandleFunc("hi", func(w mrpc.TopicWriter, data []byte) {
@@ -44,5 +47,6 @@ func main() {
 
 	// Start the service
 	log.Printf("Starting MRPC service with status on %v", *address)
+	ready <- struct{}{}
 	log.Fatalf("Service stopped: %v", service.Serve())
 }
