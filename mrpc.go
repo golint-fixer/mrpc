@@ -87,8 +87,13 @@ func NewService(t Transport, opts ...func(*Service) error) (*Service, error) {
 }
 
 // GetFQTopic returns the full topic name
+func GetFQTopic(serviceName, topic string) string {
+	return fmt.Sprintf("%s.%s", serviceName, topic)
+}
+
+// GetFQTopic returns the full topic name
 func (s *Service) GetFQTopic(topic string) string {
-	return fmt.Sprintf("%s.%s", s.name, topic)
+	return GetFQTopic(s.name, topic)
 }
 
 // Handle registers a handler for particular topic
