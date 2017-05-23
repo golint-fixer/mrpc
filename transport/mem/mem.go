@@ -37,7 +37,7 @@ func (t *Mem) Subscribe(topic string, handler mrpc.SubscribeHandlerFunc) error {
 	ch := t.getOrCreateChan(topic)
 	go func() {
 		for m := range ch {
-			handler(m.topic, topic, m.data)
+			go handler(m.topic, topic, m.data)
 		}
 	}()
 	return nil

@@ -3,31 +3,40 @@ package mem
 import (
 	"math/rand"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
-
-	"sync"
 
 	"github.com/miracl/mrpc/transport"
 )
 
+func TestPubSub(t *testing.T) {
+	msg := "test message "
+	trans := New()
+	defer trans.Stop()
+
+	res := make(chan []byte)
+	err := trans.Subscribe("topic", func(resTopic, topic string, data []byte) {
+		res <- data
+		close(res)
+	})
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if err := trans.Publish("topic", []byte(msg)); err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	d := <-res
+	if string(d) != msg {
+		t.Fatalf("Unexpected response: %v", string(d))
+	}
+}
 func TestMemReq(t *testing.T) {
 	msg := "test response"
 	trans := New()
-
-	_, err := trans.Request("topic", []byte("test"), 1*time.Second)
-	if !transport.IsTimeout(err) {
-		t.Fatalf("Expected timeout")
-	}
-
-	trans.Subscribe("sleep", func(resTopic, topic string, data []byte) {
-		time.Sleep(150 * time.Millisecond)
-		trans.Publish(resTopic, []byte(msg))
-	})
-	_, err = trans.Request("sleep", []byte("test"), 100*time.Millisecond)
-	if !transport.IsTimeout(err) {
-		t.Fatalf("Expected timeout")
-	}
+	defer trans.Stop()
 
 	trans.Subscribe("topic", func(resTopic, topic string, data []byte) {
 		trans.Publish(resTopic, []byte(msg))
@@ -40,19 +49,71 @@ func TestMemReq(t *testing.T) {
 			defer wg.Done()
 			res, err := trans.Request("topic", []byte("test"), 1*time.Second)
 			if err != nil {
-				t.Fatalf("Unexpected error: %v", err)
+				t.Errorf("Unexpected error: %v", err)
 			}
 			if string(res) != msg {
-				t.Fatalf("Unexpected response %v", string(res))
+				t.Errorf("Unexpected response %v", string(res))
 			}
 		}()
 	}
 
 	wg.Wait()
-	trans.Stop()
 }
 
-func BenchmarkMemReq(b *testing.B) {
+func TestMemReqTimeout(t *testing.T) {
+	trans := New()
+	defer trans.Stop()
+
+	_, err := trans.Request("topic", []byte("test"), 1*time.Second)
+	if !transport.IsTimeout(err) {
+		t.Fatalf("Expected timeout")
+	}
+
+	trans.Subscribe("sleep", func(resTopic, topic string, data []byte) {
+		time.Sleep(150 * time.Millisecond)
+		trans.Publish(resTopic, nil)
+	})
+	_, err = trans.Request("sleep", []byte("test"), 100*time.Millisecond)
+	if !transport.IsTimeout(err) {
+		t.Fatalf("Expected timeout")
+	}
+}
+
+func TestMemClose(t *testing.T) {
+	trans := New()
+
+	done := make(chan struct{})
+	trans.Subscribe("sleep", func(resTopic, topic string, data []byte) {
+		time.Sleep(1 * time.Millisecond)
+		trans.Publish(resTopic, nil)
+		close(done)
+	})
+
+	_, err := trans.Request("sleep", nil, 0)
+	if !transport.IsTimeout(err) {
+		t.Fatalf("Expected timeout")
+	}
+	trans.Stop()
+
+	<-done
+}
+
+func BenchmarkMemReqOneSub(b *testing.B) {
+	trans := New()
+	defer trans.Stop()
+
+	trans.Subscribe("topic", func(resTopic, topic string, data []byte) {
+		trans.Publish(resTopic, nil)
+	})
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			trans.Request("topic", nil, 1*time.Second)
+		}
+	})
+}
+
+func BenchmarkMemReqManySubs(b *testing.B) {
 	cases := []struct {
 		name string
 		subs int
