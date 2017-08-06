@@ -1,6 +1,7 @@
 package mrpc
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -57,7 +58,9 @@ func TestNewServiceWithStatus(t *testing.T) {
 	topic := "pattern"
 
 	// Request to missing topic. Expect error
-	if _, err := s.Request(s.GetFQTopic(topic), []byte{}, 1*time.Second); err == nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	if _, err := s.Request(ctx, s.GetFQTopic(topic), []byte{}); err == nil {
 		t.Fatal("Expected error")
 	}
 
@@ -77,7 +80,9 @@ func TestNewServiceWithStatus(t *testing.T) {
 	}
 
 	// Req topic
-	resp, err := s.Request(s.GetFQTopic(topic), []byte{}, 1*time.Second)
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel2()
+	resp, err := s.Request(ctx2, s.GetFQTopic(topic), []byte{})
 	if err != nil {
 		t.Fatalf("Request returned unexpected error: %v", err)
 	}
@@ -195,7 +200,7 @@ func (t *FakeTransport) Publish(topic string, data []byte) error {
 	return nil
 }
 
-func (t *FakeTransport) Request(topic string, data []byte, timeout time.Duration) (respData []byte, err error) {
+func (t *FakeTransport) Request(ctx context.Context, topic string, data []byte) (respData []byte, err error) {
 	h, ok := t.subs[topic]
 	if !ok {
 		return nil, errors.New("So subscribers on this topic")

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"testing"
 )
@@ -11,7 +12,9 @@ func TestAdvancedExample(t *testing.T) {
 	<-ready
 
 	// Request to topic a
-	res, err := service.Request("service.a", nil, timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	res, err := service.Request(ctx, "service.a", nil)
 	if err != nil {
 		t.Errorf("Requesting service.a: Unexpected error %v", err)
 	}

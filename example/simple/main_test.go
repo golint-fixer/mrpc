@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -47,7 +48,9 @@ func TestSimpleExample(t *testing.T) {
 		t.Errorf("Unexpected status response: %v", s)
 	}
 
-	hires, err := service.Request("example.hi", nil, timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	hires, err := service.Request(ctx, "example.hi", nil)
 	if err != nil {
 		t.Errorf("Requesting example.hi.proxy: Unexpected error %v", err)
 	}

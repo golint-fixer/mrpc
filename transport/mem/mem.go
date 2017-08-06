@@ -1,13 +1,12 @@
 package mem
 
 import (
+	"context"
 	"math/rand"
 	"strconv"
 	"sync"
-	"time"
 
 	"github.com/miracl/mrpc"
-	"github.com/miracl/mrpc/transport"
 )
 
 type subscribeHandlerFunc func(responseTopic, requestTopic string, data []byte)
@@ -53,10 +52,10 @@ func (t *Mem) Publish(topic string, data []byte) error {
 }
 
 // Request check if there is a subscriber, executes it and returns the result
-func (t *Mem) Request(topic string, data []byte, timeout time.Duration) ([]byte, error) {
+func (t *Mem) Request(ctx context.Context, topic string, data []byte) ([]byte, error) {
 	ch, ok := t.getChan(topic)
 	if !ok {
-		return nil, transport.ErrTimeout
+		return nil, context.DeadlineExceeded
 	}
 
 	resTopic := "_RESPONSE." + topic + "." + strconv.Itoa(rand.Int())
@@ -66,8 +65,8 @@ func (t *Mem) Request(topic string, data []byte, timeout time.Duration) ([]byte,
 	select {
 	case d := <-resCh:
 		return d.data, nil
-	case <-time.After(timeout):
-		return nil, transport.ErrTimeout
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
 }
 

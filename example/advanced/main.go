@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"log"
@@ -52,7 +53,9 @@ func main() {
 		logRequest("a")
 
 		// Request blocking topic B
-		response, _ := service.Request(service.GetFQTopic("b"), data, timeout)
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		response, _ := service.Request(ctx, service.GetFQTopic("b"), data)
 		w.Write(response)
 
 		logDone("a")

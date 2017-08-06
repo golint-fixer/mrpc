@@ -1,13 +1,12 @@
 package mem
 
 import (
+	"context"
 	"math/rand"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/miracl/mrpc/transport"
 )
 
 func TestPubSub(t *testing.T) {
@@ -47,7 +46,9 @@ func TestMemReq(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			res, err := trans.Request("topic", []byte("test"), 1*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			defer cancel()
+			res, err := trans.Request(ctx, "topic", []byte("test"))
 			if err != nil {
 				t.Errorf("Unexpected error: %v", err)
 			}
@@ -63,9 +64,10 @@ func TestMemReq(t *testing.T) {
 func TestMemReqTimeout(t *testing.T) {
 	trans := New()
 	defer trans.Stop()
-
-	_, err := trans.Request("topic", []byte("test"), 1*time.Second)
-	if !transport.IsTimeout(err) {
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	_, err := trans.Request(ctx, "topic", []byte("test"))
+	if err != context.DeadlineExceeded {
 		t.Fatalf("Expected timeout")
 	}
 
@@ -73,8 +75,11 @@ func TestMemReqTimeout(t *testing.T) {
 		time.Sleep(150 * time.Millisecond)
 		trans.Publish(resTopic, nil)
 	})
-	_, err = trans.Request("sleep", []byte("test"), 100*time.Millisecond)
-	if !transport.IsTimeout(err) {
+
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel2()
+	_, err = trans.Request(ctx2, "sleep", []byte("test"))
+	if err != context.DeadlineExceeded {
 		t.Fatalf("Expected timeout")
 	}
 }
@@ -89,8 +94,10 @@ func TestMemClose(t *testing.T) {
 		close(done)
 	})
 
-	_, err := trans.Request("sleep", nil, 0)
-	if !transport.IsTimeout(err) {
+	ctx, cancel := context.WithTimeout(context.Background(), 0)
+	defer cancel()
+	_, err := trans.Request(ctx, "sleep", nil)
+	if err != context.DeadlineExceeded {
 		t.Fatalf("Expected timeout")
 	}
 	trans.Stop()
@@ -108,7 +115,9 @@ func BenchmarkMemReqOneSub(b *testing.B) {
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			trans.Request("topic", nil, 1*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 0)
+			defer cancel()
+			trans.Request(ctx, "topic", nil)
 		}
 	})
 }
@@ -155,7 +164,9 @@ func BenchmarkMemReqManySubs(b *testing.B) {
 			b.RunParallel(func(pb *testing.PB) {
 				for pb.Next() {
 					t := "topic" + strconv.Itoa(rand.Intn(tc.subs))
-					trans.Request(t, nil, 1*time.Second)
+					ctx, cancel := context.WithTimeout(context.Background(), 0)
+					defer cancel()
+					trans.Request(ctx, t, nil)
 				}
 			})
 		})

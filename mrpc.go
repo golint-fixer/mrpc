@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
 )
 
 const (
@@ -33,7 +32,7 @@ type SubscribeHandlerFunc func(responseTopic, requestTopic string, data []byte)
 type Transport interface {
 	Subscribe(topic string, handler SubscribeHandlerFunc) error
 	Publish(topic string, data []byte) error
-	Request(topic string, data []byte, timeout time.Duration) (respData []byte, err error)
+	Request(ctx context.Context, topic string, data []byte) (respData []byte, err error)
 }
 
 // TopicClient is implementation of TopicWriter
@@ -127,9 +126,9 @@ func (s *Service) Publish(topic string, data []byte) (err error) {
 }
 
 // Request does a MRPC request and waits for response
-func (s *Service) Request(topic string, data []byte, timeout time.Duration) (respData []byte, err error) {
+func (s *Service) Request(ctx context.Context, topic string, data []byte) (respData []byte, err error) {
 	s.adapter.ProcessMessage(reqMessageType, topic, data)
-	respData, err = s.t.Request(topic, data, timeout)
+	respData, err = s.t.Request(ctx, topic, data)
 	if err != nil {
 		return nil, err
 	}

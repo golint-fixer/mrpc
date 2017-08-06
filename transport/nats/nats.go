@@ -1,12 +1,10 @@
 package nats
 
 import (
-	"time"
-
-	"github.com/nats-io/go-nats"
+	"context"
 
 	"github.com/miracl/mrpc"
-	"github.com/miracl/mrpc/transport"
+	"github.com/nats-io/go-nats"
 )
 
 const queue = "mrpc"
@@ -15,7 +13,7 @@ const queue = "mrpc"
 type natsConn interface {
 	QueueSubscribe(subj, queue string, cb nats.MsgHandler) (*nats.Subscription, error)
 	Publish(subj string, data []byte) error
-	Request(subj string, data []byte, timeout time.Duration) (m *nats.Msg, err error)
+	RequestWithContext(ctx context.Context, subj string, data []byte) (m *nats.Msg, err error)
 	Close()
 }
 
@@ -44,12 +42,9 @@ func (n *NATS) Publish(topicName string, data []byte) error {
 }
 
 // Request send a request to a topic and waits for response
-func (n *NATS) Request(topicName string, data []byte, timeout time.Duration) (respData []byte, err error) {
-	msg, err := n.Conn.Request(topicName, data, timeout)
+func (n *NATS) Request(ctx context.Context, topicName string, data []byte) (respData []byte, err error) {
+	msg, err := n.Conn.RequestWithContext(ctx, topicName, data)
 	if err != nil {
-		if err == nats.ErrTimeout {
-			return nil, transport.ErrTimeout
-		}
 		return nil, err
 	}
 
