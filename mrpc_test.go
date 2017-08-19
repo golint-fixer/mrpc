@@ -121,7 +121,9 @@ func TestNewServiceWithStatus(t *testing.T) {
 	}
 
 	// Stop the http status server
-	s.Stop(nil)
+	if err := s.Stop(context.Background()); err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
 	statusResp, _ = http.Get("http://127.0.0.1:8080")
 	if statusResp != nil {
 		t.Fatal("Status server not stopped")
@@ -134,7 +136,7 @@ func TestServeNoStatus(t *testing.T) {
 		t.Error("can't serve without status enabled")
 	}
 
-	if err := s.Stop(nil); err != nil {
+	if err := s.Stop(context.Background()); err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
 }
