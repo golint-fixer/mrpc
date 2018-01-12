@@ -1,5 +1,8 @@
 language: go
 
+services:
+  - docker
+
 matrix:
   include:
   - go: 1.x
@@ -22,4 +25,6 @@ before_script:
   - if [ "$FULL" = "true" ]; then test -z "$(golint ./... 2>&1 | tee /dev/stderr)"; fi;
 
 script:
+  - docker pull nats
+  - docker run -p 4222:4222 -d nats
   - if [ "$FULL" = "true" ]; then goveralls -service=travis-ci; else go test -race $(go list ./... | grep -v /vendor/); fi;

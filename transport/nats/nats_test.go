@@ -3,6 +3,7 @@ package nats
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -35,7 +36,6 @@ func TestPubSub(t *testing.T) {
 	trans := NATS{Conn: newNatsConnMock()}
 
 	trans.Subscribe("test", func(responseTopic, requestTopic string, rawData []byte) {
-		fmt.Println(responseTopic, requestTopic)
 		trans.Publish(responseTopic, []byte("Sub:Response"))
 	})
 
@@ -45,7 +45,7 @@ func TestPubSub(t *testing.T) {
 		t.Fatalf("QueueSubscribe not called")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 	resData, err := trans.Request(ctx, "test", []byte{})
 	if err != nil {
@@ -96,8 +96,9 @@ func TestNatsRequest(t *testing.T) {
 }
 
 type natsConnMock struct {
-	subs map[string]nats.MsgHandler
-	pubs map[string][]byte
+	subs    map[string]nats.MsgHandler
+	pubs    map[string][]byte
+	pubsMux *sync.RWMutex
 
 	reqerr    error
 	reqmsgnil bool
@@ -109,6 +110,7 @@ func newNatsConnMock() *natsConnMock {
 	c := &natsConnMock{}
 	c.subs = map[string]nats.MsgHandler{}
 	c.pubs = map[string][]byte{}
+	c.pubsMux = &sync.RWMutex{}
 	return c
 }
 
@@ -118,7 +120,9 @@ func (conn *natsConnMock) QueueSubscribe(subj, queue string, cb nats.MsgHandler)
 }
 
 func (conn *natsConnMock) Publish(subj string, data []byte) error {
+	conn.pubsMux.Lock()
 	conn.pubs[subj] = data
+	conn.pubsMux.Unlock()
 	return nil
 }
 
@@ -140,10 +144,18 @@ func (conn *natsConnMock) RequestWithContext(ctx context.Context, subj string, d
 
 	h(&nats.Msg{Reply: replyTopic})
 
-	redData, ok := conn.pubs[replyTopic]
-	if !ok {
-		return nil, context.DeadlineExceeded
+	var redData []byte
+	for redData == nil {
+		select {
+		case <-ctx.Done():
+			return nil, context.DeadlineExceeded
+		default:
+			conn.pubsMux.RLock()
+			redData, _ = conn.pubs[replyTopic]
+			conn.pubsMux.RUnlock()
+		}
 	}
+
 	return &nats.Msg{Data: redData}, nil
 }
 

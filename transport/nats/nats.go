@@ -31,7 +31,7 @@ func New(conn natsConn) *NATS {
 // Subscribe adds a handler to particular topic
 func (n *NATS) Subscribe(topicName string, handler mrpc.SubscribeHandlerFunc) error {
 	_, err := n.Conn.QueueSubscribe(topicName, n.Queue, func(msg *nats.Msg) {
-		handler(msg.Reply, topicName, msg.Data)
+		go handler(msg.Reply, topicName, msg.Data)
 	})
 	return err
 }
