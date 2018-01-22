@@ -8,8 +8,6 @@ matrix:
   - go: 1.x
     os: linux
     env: FULL=true
-  - go: 1.x
-    os: osx
   - go: tip
     os: linux
 
